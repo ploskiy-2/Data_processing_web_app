@@ -103,7 +103,7 @@ namespace DataProcForWebApp
                         { output.AddOrUpdate(columns[0], columns[1], (existingKey, existingValue) => existingValue); }
                     }
                 }
-            }, TaskCreationOptions.LongRunning);/// report that this is long running task
+            });/// report that this is long running task
 
         }
 
@@ -140,7 +140,7 @@ namespace DataProcForWebApp
                                 //в словарь где ключом является имя человека, а значение это множество фильмо где он принял участие
                                 // пытаемся создать такую пару ключ-значение
                                 // если такая пара уже есть, то к множеству фильмов надо добавить текущий фильм
-                                output.AddOrUpdate(humansName, new HashSet<Movie>(), (existingKey, existingValue) =>
+                                output.AddOrUpdate(humansName, new HashSet<Movie>() { currentMovie }, (existingKey, existingValue) =>
                                 {
                                     existingValue.Add(currentMovie);
                                     return existingValue;
@@ -184,7 +184,7 @@ namespace DataProcForWebApp
 
         }
 
-
+        //получаем по айди тега его название
         public static Task ReceiveTagsIdAsync(string filename, ConcurrentDictionary<string, string> output) 
         {
             return Task.Factory.StartNew(() =>
@@ -205,7 +205,7 @@ namespace DataProcForWebApp
             });
         }
 
-
+        //создание словаря тег - множество фильмов данного тега 
         public static Task ReceiveTagsMoviesAsync(string filename, ConcurrentDictionary<string, string> dictionaryTagsId, ConcurrentDictionary<string, HashSet<Movie>> output, ConcurrentDictionary<string, Movie> allMovies, ConcurrentDictionary<string,string> LensMovies)
         {
             return Task.Factory.StartNew(() =>
@@ -222,7 +222,7 @@ namespace DataProcForWebApp
                         string relevance = columns[2].Replace('.',','); //получаем соответствие тега и фильма
                         if (double.TryParse(relevance, out double number))
                         {
-                            if (number > 0.5) 
+                            if (number > 0) 
                             {
                                 //из словаря где ключ это id на lens получаем название фильма
                                 bool flagForTittleForMovie = LensMovies.TryGetValue(movieId, out string movieTittle);
@@ -232,7 +232,8 @@ namespace DataProcForWebApp
                                     bool flagForCurrentMovie = allMovies.TryGetValue(movieTittle, out Movie currentMovie);
                                     if (flagForCurrentMovie)
                                     {
-
+                                        //по айди тегу получаем название тега и доавбляем его в множество текущего фильма, а так же в словарь
+                                        // тег - множество фильмов 
                                         bool flagForNameTag = dictionaryTagsId.TryGetValue(tagsId, out string nameTag);
                                         currentMovie.tagSet.Add(nameTag);
                                         output.AddOrUpdate(nameTag, new HashSet<Movie>() {currentMovie}, (existingKey, existingValue) =>
@@ -247,7 +248,7 @@ namespace DataProcForWebApp
                         }
                     }
                 }
-            });
+            },TaskCreationOptions.LongRunning);
         }
         
     }
@@ -309,9 +310,6 @@ namespace DataProcForWebApp
             await Task.WhenAll(createDictionaryActorsDirectorsCodes, createDictionaryActorsDirectorsNames, createDictionaryMovieRating, createDictionaryFilmsLenCode);
 
 
-
-
-
             string filename_TagsLenCodes = @"C:\Users\VLADIMIR\Desktop\ml-latest\ml-latest\TagCodes_MovieLens.csv";
             string filename_TagsLenScores = @"C:\Users\VLADIMIR\Desktop\ml-latest\ml-latest\TagScores_MovieLens.csv";
 
@@ -334,54 +332,69 @@ namespace DataProcForWebApp
 
             await createDictionaryTgsId;
             await createDictionaryTagsDictionary;
-            /*
-            int i = 0;
-            foreach (var movie in allMoviesImdb)
+            
+
+            while (true)
             {
-                i += 1;
-                if (i < 20)
+                Console.WriteLine("Выберите нужный вариант для Вас");
+                Console.WriteLine("a - распечатать инфмормацию о фильме");
+                Console.WriteLine("b - распечатать информация об актере");
+                Console.WriteLine("c - распечатать информацию о теге");
+                Console.WriteLine("если хотите выйте - напишите exit");
+                string variantChar = Console.ReadLine() ;
+                if (variantChar == "exit") { break; }
+                if (variantChar == "a") 
                 {
-                    Console.WriteLine("Название этого фильма:" + " " + movie.Key);
-                    Console.WriteLine("Его рейтинг:" + " " + movie.Value.movieRating);
-                    Console.WriteLine("Его режиссер:" + " " + movie.Value.director);
-                    Console.WriteLine("Его актеры:" + " ");
-                    foreach (var t in movie.Value.actorsSet)
-                    {
-                        Console.Write(t + " ");
-                    }
-                    Console.WriteLine("Его теги:" + " ");
-                    foreach (var t in movie.Value.tagSet)
-                    {
-                        Console.Write(t + " ");
-                    }
+                    Console.Clear();
+                    Console.WriteLine("Введите название фильма:");
+                    string tittleMovie = Console.ReadLine();
                     Console.WriteLine();
-                }
-                else
-                {
-                    break;
-                }
-            }
-            */
-            int i = 0;
-            foreach (var t in finallyTagsDictionary)
-            {
-                i += 1;
-                if (i < 20)
-                {
-                    Console.WriteLine("Название этого тега:" + " " + t.Key);
-                    Console.WriteLine("Его фильмы:" + " ");
-                    foreach (var v in t.Value)
+                    bool flagForCurrentMovie = allMoviesImdb.TryGetValue(tittleMovie, out var movie);
+                    if (flagForCurrentMovie)                  
                     {
-                        Console.Write(v.tittle + " ");
+                        Console.WriteLine("Название этого фильма:" + " " + movie.tittle);
+                        Console.WriteLine("Рейтинг этого фильма:" + " " + movie.movieRating);
+                        Console.WriteLine("Режиссер этого фильма:" + " " + movie.director);
+                        Console.WriteLine("Актеры фильма" + " " + string.Join(", ", movie.actorsSet));
+                        Console.WriteLine("Теги фильма" + " " + string.Join(", ", movie.tagSet));
                     }
-                    Console.WriteLine();
+                    else { Console.WriteLine("Этого фильма нет в базе данных/Этот фильм не на русском/английском"); }
                 }
-                else
+                if (variantChar == "b")
                 {
-                    break;
+                    Console.Clear();
+                    Console.WriteLine("Введите имя актера:");
+                    string humanName = Console.ReadLine();
+                    Console.WriteLine();
+                    bool flagForHumanMovie = finallyActorsDirectorsDict.TryGetValue(humanName, out var movieSet);
+                    if (flagForHumanMovie)
+                    {
+                        Console.WriteLine("Фильмы, в которых он/она принял/а участие:" + " " + string.Join(", ", movieSet.Select(item => item.tittle)));
+                    }
+                    else { Console.WriteLine("Этого человека нет в базе данных"); }
                 }
+                if (variantChar == "c")
+                {
+                    Console.Clear();
+                    Console.WriteLine("Введите название тега:");
+                    string tagName = Console.ReadLine();
+                    Console.WriteLine();
+                    bool flagForTagMovie = finallyTagsDictionary.TryGetValue(tagName, out var movieSetforTag);
+                    if (flagForTagMovie)
+                    {
+                        Console.WriteLine("Фильмы, помеченные данным тегом:" + " " + string.Join(", ", movieSetforTag.Select(item => item.tittle)));
+                    }
+                    else { Console.WriteLine("Этого тега нет в базе данных"); }
+                }
+                Console.WriteLine();
             }
             Console.WriteLine("Programm has successfully completed.");
         }
     }
 }
+//Выход Рипа и гнома
+//Stanley Kubrick
+//Leonardo DiCaprio
+//Выживший
+//Morgan Freeman Ron Howard Natalie Portman Gary Oldman Al Pacino
+//
