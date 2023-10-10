@@ -71,7 +71,7 @@ namespace DataProcForWebApp
                         string[] columns = line.Split(',');
                         
                         string movieIMDBCode = "tt"+columns[1]; //код на имдб
-                        string movieLensCode = columns[2]; //код на lens
+                        string movieLensCode = columns[0]; //код на lens
                         //по коду на имдб получаем название фильма из словаря filmsCodeIMDB
                         bool flagForTittleForMovie = filmsCodeIMDB.TryGetValue(movieIMDBCode, out string movieTittle);
                         //Console.WriteLine(movieIMDBCode + " " + movieLensCode + " " + movieTittle );
@@ -87,7 +87,7 @@ namespace DataProcForWebApp
             }, TaskCreationOptions.LongRunning);/// report that this is long running task
         }
 
-        ///
+        //получаем по кодам людей их имя
         public static Task ReceiveActorsAndDirectorsNamesAsync(string filename, ConcurrentDictionary<string, string> output)
         {
             return Task.Factory.StartNew(() =>
@@ -109,7 +109,7 @@ namespace DataProcForWebApp
 
 
 
-        ///
+        // получаем по коду данного человека множество фильмов где он принял участие
         public static Task ReceiveActorsAndDirectorsCodesAsync(string filename, ConcurrentDictionary<string, HashSet<Movie>> output, ConcurrentDictionary<string, string> dictHumansCode, ConcurrentDictionary<string, Movie> allMovies, ConcurrentDictionary<string, string> dictMovieCodes )
         {
             return Task.Factory.StartNew(() =>
@@ -154,6 +154,7 @@ namespace DataProcForWebApp
         }
 
 
+        // получаем по коду фильма его рейтинг на имдб
         public static Task ReceiveMovieRatingAsync(string filename,ConcurrentDictionary<string, Movie> allMovies, ConcurrentDictionary<string, string> dictMovieCodes)
         {
             return Task.Factory.StartNew(() =>
@@ -184,6 +185,71 @@ namespace DataProcForWebApp
         }
 
 
+        public static Task ReceiveTagsIdAsync(string filename, ConcurrentDictionary<string, string> output) 
+        {
+            return Task.Factory.StartNew(() =>
+            {
+                using (FileStream stream = File.OpenRead(filename))
+                {
+                    var reader = new StreamReader(stream);
+                    string line = null;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        string[] columns = line.Split(',');
+
+                        string tagsId = columns[0]; //код тега
+                        string tagsName = columns[1]; //именование тега
+                        output.AddOrUpdate(tagsId, tagsName, (existingKey, existingValue) => existingValue); 
+                    }
+                }
+            });
+        }
+
+
+        public static Task ReceiveTagsMoviesAsync(string filename, ConcurrentDictionary<string, string> dictionaryTagsId, ConcurrentDictionary<string, HashSet<Movie>> output, ConcurrentDictionary<string, Movie> allMovies, ConcurrentDictionary<string,string> LensMovies)
+        {
+            return Task.Factory.StartNew(() =>
+            {
+                using (FileStream stream = File.OpenRead(filename))
+                {
+                    var reader = new StreamReader(stream);
+                    string line = null;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        string[] columns = line.Split(',');
+                        string movieId = columns[0]; //код фильма
+                        string tagsId = columns[1]; //именование тега
+                        string relevance = columns[2].Replace('.',','); //получаем соответствие тега и фильма
+                        if (double.TryParse(relevance, out double number))
+                        {
+                            if (number > 0.5) 
+                            {
+                                //из словаря где ключ это id на lens получаем название фильма
+                                bool flagForTittleForMovie = LensMovies.TryGetValue(movieId, out string movieTittle);
+                                if (flagForTittleForMovie)
+                                {
+                                    // по названию фильма получаем объект класса movie
+                                    bool flagForCurrentMovie = allMovies.TryGetValue(movieTittle, out Movie currentMovie);
+                                    if (flagForCurrentMovie)
+                                    {
+
+                                        bool flagForNameTag = dictionaryTagsId.TryGetValue(tagsId, out string nameTag);
+                                        currentMovie.tagSet.Add(nameTag);
+                                        output.AddOrUpdate(nameTag, new HashSet<Movie>() {currentMovie}, (existingKey, existingValue) =>
+                                        {
+                                            existingValue.Add(currentMovie);
+                                            return existingValue;
+                                        });
+                                    }
+                                }
+
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
     }
     internal class Program
     {
@@ -237,22 +303,37 @@ namespace DataProcForWebApp
 
             //the path where the movie ratings file is located
             string filename_moviesRating = @"C:\Users\VLADIMIR\Desktop\ml-latest\ml-latest\Ratings_IMDB.tsv";
-            // 
+            // получаем для каждого фильма его рейтинг на имдб
             Task createDictionaryMovieRating= PipelineStages.ReceiveMovieRatingAsync(filename_moviesRating, allMoviesImdb, filmsCodeIMDB_RU_EN);            
             
             await Task.WhenAll(createDictionaryActorsDirectorsCodes, createDictionaryActorsDirectorsNames, createDictionaryMovieRating, createDictionaryFilmsLenCode);
 
 
-            int i = 0;
-            foreach (var t in filmsCodeLens_RU_EN)
-            {
-                i += 1;
-                if (i < 20)
-                {
-                    Console.WriteLine(t.Key + ": " + t.Value);
-                }
-                else { break; }
-            }
+
+
+
+            string filename_TagsLenCodes = @"C:\Users\VLADIMIR\Desktop\ml-latest\ml-latest\TagCodes_MovieLens.csv";
+            string filename_TagsLenScores = @"C:\Users\VLADIMIR\Desktop\ml-latest\ml-latest\TagScores_MovieLens.csv";
+
+            //словарь где ключ это название тега, а значение это множество фильмов с таким тегом 
+            var finallyTagsDictionary = new ConcurrentDictionary<string, HashSet<Movie>>();
+
+            //
+            //По id тега я получаю сам тег
+            var dictionaryTagsId = new ConcurrentDictionary<string, string>();
+            Task createDictionaryTgsId = PipelineStages.ReceiveTagsIdAsync(filename_TagsLenCodes,dictionaryTagsId);
+
+
+            //
+
+            //передаем два файла, из файла filename_TagsLenCodes мы получаем код фильма на lens (первая колонка)
+            // по второй колонке ищем по id тэга его название 
+            //если в файле filename_TagsLenScores соотстветвие более 0,5 то добавляем тэг в множестве в классе Movie , и в выходной словарь данного тэга
+            Task createDictionaryTagsDictionary = PipelineStages.ReceiveTagsMoviesAsync(filename_TagsLenScores, dictionaryTagsId, finallyTagsDictionary,allMoviesImdb, filmsCodeLens_RU_EN);
+
+
+            await createDictionaryTgsId;
+            await createDictionaryTagsDictionary;
             /*
             int i = 0;
             foreach (var movie in allMoviesImdb)
@@ -268,6 +349,11 @@ namespace DataProcForWebApp
                     {
                         Console.Write(t + " ");
                     }
+                    Console.WriteLine("Его теги:" + " ");
+                    foreach (var t in movie.Value.tagSet)
+                    {
+                        Console.Write(t + " ");
+                    }
                     Console.WriteLine();
                 }
                 else
@@ -276,6 +362,25 @@ namespace DataProcForWebApp
                 }
             }
             */
+            int i = 0;
+            foreach (var t in finallyTagsDictionary)
+            {
+                i += 1;
+                if (i < 20)
+                {
+                    Console.WriteLine("Название этого тега:" + " " + t.Key);
+                    Console.WriteLine("Его фильмы:" + " ");
+                    foreach (var v in t.Value)
+                    {
+                        Console.Write(v.tittle + " ");
+                    }
+                    Console.WriteLine();
+                }
+                else
+                {
+                    break;
+                }
+            }
             Console.WriteLine("Programm has successfully completed.");
         }
     }
