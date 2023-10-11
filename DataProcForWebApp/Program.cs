@@ -74,13 +74,11 @@ namespace DataProcForWebApp
                         string movieLensCode = columns[0]; //код на lens
                         //по коду на имдб получаем название фильма из словаря filmsCodeIMDB
                         bool flagForTittleForMovie = filmsCodeIMDB.TryGetValue(movieIMDBCode, out string movieTittle);
-                        //Console.WriteLine(movieIMDBCode + " " + movieLensCode + " " + movieTittle );
                         if (flagForTittleForMovie)
                         {
                             //по названию фильма получаем объект класса Movie - currentMovie. от которого хотим получить его название( поле tittle) 
                             bool flagForCurrentForMovie = allMovies.TryGetValue(movieTittle, out Movie currentMovie);
                             if (flagForCurrentForMovie) { output.AddOrUpdate(movieLensCode, currentMovie.tittle, (existingKey, existingValue) => existingValue); }
-
                         }                    
                     }
                 }
@@ -193,6 +191,7 @@ namespace DataProcForWebApp
                 {
                     var reader = new StreamReader(stream);
                     string line = null;
+                    
                     while ((line = reader.ReadLine()) != null)
                     {
                         string[] columns = line.Split(',');
@@ -206,6 +205,10 @@ namespace DataProcForWebApp
         }
 
         //создание словаря тег - множество фильмов данного тега 
+        //dictionaryTagsId - словарь где ключ это ид тега а значение сам тег
+        // output - это словарь где коюч тег а значение множество его фильмов
+        //allmovies - все фильмы 
+        //LensMovies - ключ код на ленс а значение название фильма
         public static Task ReceiveTagsMoviesAsync(string filename, ConcurrentDictionary<string, string> dictionaryTagsId, ConcurrentDictionary<string, HashSet<Movie>> output, ConcurrentDictionary<string, Movie> allMovies, ConcurrentDictionary<string,string> LensMovies)
         {
             return Task.Factory.StartNew(() =>
@@ -217,17 +220,19 @@ namespace DataProcForWebApp
                     while ((line = reader.ReadLine()) != null)
                     {
                         string[] columns = line.Split(',');
-                        string movieId = columns[0]; //код фильма
+                        string movieId = columns[0]; //код фильма на ленс
                         string tagsId = columns[1]; //именование тега
                         string relevance = columns[2].Replace('.',','); //получаем соответствие тега и фильма
+                                                                        
                         if (double.TryParse(relevance, out double number))
                         {
-                            if (number > 0) 
+                            if (number > 0.75) 
                             {
                                 //из словаря где ключ это id на lens получаем название фильма
                                 bool flagForTittleForMovie = LensMovies.TryGetValue(movieId, out string movieTittle);
                                 if (flagForTittleForMovie)
                                 {
+                                    
                                     // по названию фильма получаем объект класса movie
                                     bool flagForCurrentMovie = allMovies.TryGetValue(movieTittle, out Movie currentMovie);
                                     if (flagForCurrentMovie)
@@ -235,6 +240,10 @@ namespace DataProcForWebApp
                                         //по айди тегу получаем название тега и доавбляем его в множество текущего фильма, а так же в словарь
                                         // тег - множество фильмов 
                                         bool flagForNameTag = dictionaryTagsId.TryGetValue(tagsId, out string nameTag);
+                                        if (nameTag == "drama")
+                                        {
+                                            Console.WriteLine(currentMovie.tittle);
+                                        }
                                         currentMovie.tagSet.Add(nameTag);
                                         output.AddOrUpdate(nameTag, new HashSet<Movie>() {currentMovie}, (existingKey, existingValue) =>
                                         {
@@ -276,9 +285,9 @@ namespace DataProcForWebApp
             ///task which creates filmsCodeIMDB_RU_EN dictionary
             Task createDictionaryFilmsImdbCode = PipelineStages.RecieveMovieImdbCodesAsync(filename_movieCodeImdb, filmsCodeIMDB_RU_EN, allMoviesImdb);
 
-            Task createDictionaryFilmsLenCode = PipelineStages.RecieveMovieLensCodesAsync(filename_movieCodeLens, filmsCodeLens_RU_EN, filmsCodeIMDB_RU_EN, allMoviesImdb);
 
             await Task.WhenAll(createDictionaryFilmsImdbCode);
+            Task createDictionaryFilmsLenCode = PipelineStages.RecieveMovieLensCodesAsync(filename_movieCodeLens, filmsCodeLens_RU_EN, filmsCodeIMDB_RU_EN, allMoviesImdb);
 
 
 
@@ -332,8 +341,6 @@ namespace DataProcForWebApp
 
             await createDictionaryTgsId;
             await createDictionaryTagsDictionary;
-            
-
             while (true)
             {
                 Console.WriteLine("Выберите нужный вариант для Вас");
@@ -397,4 +404,6 @@ namespace DataProcForWebApp
 //Leonardo DiCaprio
 //Выживший
 //Morgan Freeman Ron Howard Natalie Portman Gary Oldman Al Pacino
-//
+//Самотна звезда Каштанка
+//view askew 1081
+//Тусовщики из супермаркета tt0113749	180
