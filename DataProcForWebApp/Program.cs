@@ -73,16 +73,14 @@ namespace DataProcForWebApp
                     string line = null;
                     while ((line = reader.ReadLine()) != null)
                     {
-                        //string[] columns = line.Split(',');
-                        //string movieIMDBCode = "tt" + columns[1]; //код на имдб
-                        //string movieLensCode = columns[0]; //код на lens
+                        string[] columns = line.Split(',');
+                        string movieIMDBCode = "tt" + columns[1]; //код на имдб
+                        string movieLensCode = columns[0]; //код на lens
 
-
-                        int tab1 = line.IndexOf(',');
-                        int tab2 = line.IndexOf(',', tab1 + 1);
-
-                        string movieIMDBCode = line.Substring(tab1 + 1, tab2 - tab1 - 1);
-                        string movieLensCode = line.Substring(0,tab1);
+                        //int tab1 = line.IndexOf(',');
+                        //int tab2 = line.IndexOf(',', tab1 + 1);
+                        //string movieIMDBCode = line.Substring(tab1 + 1, tab2 - tab1 - 1);
+                        //string movieLensCode = line.Substring(0,tab1);
                         //по коду на имдб получаем название фильма из словаря filmsCodeIMDB
                         bool flagForTittleForMovie = filmsCodeIMDB.TryGetValue(movieIMDBCode, out string movieTittle);
                         if (flagForTittleForMovie)
@@ -96,6 +94,9 @@ namespace DataProcForWebApp
             }, TaskCreationOptions.LongRunning);/// report that this is long running task
         }
 
+        
+        
+        
         //получаем по кодам людей их имя
         public static Task ReceiveActorsAndDirectorsNamesAsync(string filename, ConcurrentDictionary<string, string> output)
         {
@@ -107,9 +108,13 @@ namespace DataProcForWebApp
                     string line = null;
                     while ((line = reader.ReadLine()) != null)
                     {
-                        ///I'll have to figure out how to optimize this
-                        string[] columns = line.Split(new char[] { '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                        { output.AddOrUpdate(columns[0], columns[1], (existingKey, existingValue) => existingValue); }
+                        int tab1 = line.IndexOf('\t');
+                        int tab2 = line.IndexOf('\t', tab1 + 1);
+
+                        string codActore = line.Substring(0,tab1);
+                        string nameActor = line.Substring(tab1 + 1, tab2 - tab1 - 1);
+                        //string[] columns = line.Split(new char[] { '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                        { output.AddOrUpdate(codActore, nameActor, (existingKey, existingValue) => existingValue); }
                     }
                 }
             }, TaskCreationOptions.LongRunning);/// report that this is long running task
@@ -130,11 +135,18 @@ namespace DataProcForWebApp
                     string line = null;
                     while ((line = reader.ReadLine()) != null)
                     {
-                        string[] columns = line.Split(new char[] { '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                        if (columns[3] == "director" || columns[3] == "actor") //если данный человек актер или режиссер
+                        //string[] columns = line.Split(new char[] { '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                        int tab1 = line.IndexOf('\t');
+                        int tab2 = line.IndexOf('\t', tab1 + 1);
+                        int tab3 = line.IndexOf('\t', tab2 + 1);
+                        int tab4 = line.IndexOf('\t', tab3 + 1);
+
+                        string categoryActors = line.Substring(tab3 + 1, tab4 - tab3 - 1);
+
+                        if (categoryActors == "director" || categoryActors == "actor") //если данный человек актер или режиссер
                         {
-                            string movieCode = columns[0]; //получаем код данного фильма
-                            string humanCode = columns[2]; // получаем код этого человека
+                            string movieCode = line.Substring(0,tab1); //получаем код данного фильма
+                            string humanCode = line.Substring(tab2 + 1, tab3 - tab2 - 1); // получаем код этого человека
                             //по коду человека в словаре сопоставляющему коды людей и их имена, получаем имя человека
                             bool flagForHuman = dictHumansCode.TryGetValue(humanCode, out string humansName);
                             //по коду фильма в словаре сопоставляющему коды фильма и их названия, получаем название фильма
@@ -144,8 +156,8 @@ namespace DataProcForWebApp
                                 //в словаре всех фильмов, по названию фильма(ключ) получаем объект класса movie, поля
                                 //которого мы будем далее менять
                                 bool flagForMovie = allMovies.TryGetValue(movieTittle, out Movie currentMovie);
-                                if (columns[3] == "director") { currentMovie.director = humansName; }//пытаемся добавить режиссера
-                                if (columns[3] == "actor") { currentMovie.actorsSet.Add(humansName); }//в список актеров фильма добавляем данного актера
+                                if (categoryActors == "director") { currentMovie.director = humansName; }//пытаемся добавить режиссера
+                                if (categoryActors == "actor") { currentMovie.actorsSet.Add(humansName); }//в список актеров фильма добавляем данного актера
                                 //в словарь где ключом является имя человека, а значение это множество фильмо где он принял участие
                                 // пытаемся создать такую пару ключ-значение
                                 // если такая пара уже есть, то к множеству фильмов надо добавить текущий фильм
@@ -175,9 +187,11 @@ namespace DataProcForWebApp
                     string line = null;
                     while ((line = reader.ReadLine()) != null)
                     {
-                        string[] columns = line.Split(new char[] { '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                        string movieCode = columns[0]; //получаем код данного фильма
-                        string currentMovieRating = columns[1]; // получаем рейтинг данного фильма
+                        //string[] columns = line.Split(new char[] { '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                        int tab1 = line.IndexOf('\t');
+                        int tab2 = line.IndexOf('\t', tab1 + 1);
+                        string movieCode = line.Substring(0, tab1); //получаем код данного фильма
+                        string currentMovieRating = line.Substring(tab1 + 1, tab2 - tab1 - 1); // получаем рейтинг данного фильма
                         //по коду фильма в словаре сопоставляющему коды фильма и их названия, получаем название фильма
                         bool flagForTittleForMovie = dictMovieCodes.TryGetValue(movieCode, out string movieTittle);
                         if (flagForTittleForMovie) //если все нашлось то
@@ -192,6 +206,8 @@ namespace DataProcForWebApp
             }, TaskCreationOptions.LongRunning);/// report that this is long running task
 
         }
+
+
 
         //получаем по айди тега его название
         public static Task ReceiveTagsIdAsync(string filename, ConcurrentDictionary<string, string> output)
@@ -212,7 +228,7 @@ namespace DataProcForWebApp
                         output.AddOrUpdate(tagsId, tagsName, (existingKey, existingValue) => existingValue);
                     }
                 }
-            });
+            }, TaskCreationOptions.LongRunning);
         }
 
         //создание словаря тег - множество фильмов данного тега 
@@ -231,9 +247,12 @@ namespace DataProcForWebApp
                     while ((line = reader.ReadLine()) != null)
                     {
                         string[] columns = line.Split(',');
-                        string movieId = columns[0]; //код фильма на ленс
-                        string tagsId = columns[1]; //именование тега
-                        string relevance = columns[2].Replace('.', ','); //получаем соответствие тега и фильма
+                        int tab1 = line.IndexOf(',');
+                        int tab2 = line.IndexOf(',', tab1 + 1);
+
+                        string movieId = line.Substring(0, tab1); //код фильма на ленс
+                        string tagsId = line.Substring(tab1 + 1, tab2 - tab1 - 1); //id тега
+                        string relevance = line.Substring(tab2 + 1).Replace('.', ','); //получаем соответствие тега и фильма
 
                         if (double.TryParse(relevance, out double number))
                         {
